@@ -1,39 +1,622 @@
-/**
- * Ethio Suno - Enterprise Production Script
- * Architecture Level: Production Ready - Fully Fixed & Optimized
- */
+// ==========================================
+// Ethio Suno - Enterprise AI Studio Core JS
+// ==========================================
 
-const CONFIG = {
-    webhookUrl: "https://hook.eu1.make.com/b5gdgowiv4ih95mhrm8cds5fhd14mlmn",
-    defaultCredits: 2,
-    trashExpirationMs: 30 * 1000 // 30 seconds for evaluation
-};
+// 🔗 የ Make.com Custom Webhook ሊንክዎን እዚህ ይተኩ
+const MAKE_WEBHOOK_URL = "https://eu1.make.com/your-webhook-id-here"; 
 
-// --- Secure State Storage Engine ---
-const StorageEngine = {
-    get: (key) => {
-        try {
-            const raw = localStorage.getItem(btoa(key));
-            return raw ? atob(raw) : null;
-        } catch (e) {
-            console.error("Storage read exception", e);
-            return null;
-        }
+// --- ግሎባል ስቴት (Global State) ---
+let currentLanguage = 'AM'; 
+let appTheme = 'dark';
+let currentUserPhone = null;
+let userCredits = 2;
+let activeTab = 'all';
+
+// --- የትርጉም መዝገበ-ቃላት (Localization Data) ---
+const translations = {
+    EN: {
+        lowCredit: "Your production credits are running low! Please top-up below.",
+        lyricsTitle: "Lyrics / Song Verse",
+        styleTitle: "Vibe & Genre",
+        trackTitleLabel: "Track Title",
+        topUpLabel: "Top-Up Production Credits",
+        statementLabel: "Credit Ledger & Statement",
+        workspaceTitle: "My Music Vault",
+        tabAll: "All Tracks",
+        tabFav: "Favorites 🎵",
+        tabTrash: "Trash 🗑️",
+        planLabel: "Selected Package:",
+        smsLabel: "Smart Paste / Telebirr SMS Box",
+        txLabel: "Transaction Reference ID",
+        submitBtn: "Verify & Submit Payment",
+        tagChikchika: "Chikchika",
+        tagJazz: "Ethio-Jazz"
     },
-    set: (key, val) => {
-        try {
-            localStorage.setItem(btoa(key), btoa(String(val)));
-        } catch (e) {
-            console.error("Storage write exception", e);
-        }
+    AM: {
+        lowCredit: "የማምረቻ ክሬዲትዎ እያለቀ ነው! እባክዎ ከታች ጥቅል በመግዛት አካውንቶን ይሙሉ::",
+        lyricsTitle: "Lyrics / የዘፈን ግጥም",
+        styleTitle: "Vibe & Genre / ስልት",
+        trackTitleLabel: "Track Title / ርዕስ",
+        topUpLabel: "Top-Up Credits / ክሬዲት መሙያ",
+        statementLabel: "Credit Statement / የክሬዲት ታሪክ",
+        workspaceTitle: "የሙዚቃ ማህደሬ",
+        tabAll: "ሁሉም",
+        tabFav: "ተወዳጅ 🎵",
+        tabTrash: "መጣያ 🗑️",
+        planLabel: "ዕቅድ፦",
+        smsLabel: "Smart Paste / የቴሌብር SMS መለጠፊያ",
+        txLabel: "Transaction ID / የግብይት ቁጥር",
+        submitBtn: "ማረጋገጫ አቅርብ",
+        tagChikchika: "ጭቅጭቃ",
+        tagJazz: "ኢትዮ-ጃዝ"
     }
 };
 
-let currentUser = StorageEngine.get("ethio_suno_user") || "Guest";
+// --- የማስመሰያ ዳታ ቤዝ (Mock Local Storage for Demo & Offline Fallback) ---
+let database = {
+    users: {},
+    songs: [
+        { id: "s1", title: "ትዝታ ላብ", style: "Ethio-Jazz", lyrics: "ትዝታሽ ሲመጣ...", phone: "Guest", fav: false, trash: false, timestamp: Date.now() - 50000 },
+        { id: "s2", title: "ባቲ ሮክ", style: "Chikchika", lyrics: "የባቲ ማዕበል...", phone: "Guest", fav: true, trash: false, timestamp: Date.now() - 100000 }
+    ],
+    logs: [
+        { type: "plus", amt: 2, note: "Sign-up Bonus", date: "Just Now" }
+    ],
+    payments: []
+};
+
+// --- መተግበሪያው ሲነሳ (Initialization) ---
+document.addEventListener("DOMContentLoaded", () => {
+    loadDatabaseFromStorage();
+    syncUIWithState();
+    loadUserWorkspace();
+    updateLyricsCounters();
+});
+
+function saveDatabaseToStorage() {
+    localStorage.setItem("ethio_suno_db", JSON.stringify(database));
+}
+
+function loadDatabaseFromStorage() {
+    const localData = localStorage.getItem("ethio_suno_db");
+    if (localData) {
+        try { database = JSON.parse(localData); } catch (e) { console.error("DB Load Error", e); }
+    }
+}
+
+// --- የቋንቋ እና የገጽታ መቀያየሪያ (UI System) ---
+function toggleLanguage() {
+    currentLanguage = currentLanguage === 'AM' ? 'EN' : 'AM';
+    document.getElementById("langBtn").innerText = currentLanguage === 'AM' ? 'EN' : 'AM';
+    
+    document.querySelectorAll("[data-i18n]").forEach(element => {
+        const key = element.getAttribute("data-i18n");
+        if (translations[currentLanguage][key]) {
+            if (element.tagName === "INPUT" || element.tagName === "TEXTAREA") {
+                element.placeholder = translations[currentLanguage][key];
+            } else {
+                // በውስጡ አይኮን ካለው እንዳይጠፋ ለመከላከል
+                const icon = element.querySelector("i");
+                element.innerText = translations[currentLanguage][key];
+                if (icon) element.prepend(icon);
+            }
+        }
+    });
+}
+
+function toggleAppTheme() {
+    appTheme = appTheme === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute("data-theme", appTheme);
+    const themeIcon = document.getElementById("themeIcon");
+    themeIcon.className = appTheme === 'dark' ? "fa-solid fa-moon" : "fa-solid fa-sun";
+}
+
+function showToast(message, isSuccess = true) {
+    const toast = document.getElementById("toastAlert");
+    const icon = document.getElementById("toastIcon");
+    const msgSpan = document.getElementById("toastMessage");
+    
+    msgSpan.innerText = message;
+    if (isSuccess) {
+        icon.className = "fa-solid fa-circle-check";
+        icon.style.color = "var(--accent-green)";
+        toast.style.borderColor = "var(--accent-green)";
+    } else {
+        icon.className = "fa-solid fa-triangle-exclamation";
+        icon.style.color = "#f44336";
+        toast.style.borderColor = "#f44336";
+    }
+    
+    toast.classList.add("show");
+    setTimeout(() => toast.classList.remove("show"), 4000);
+}
+
+// --- አካውንት ማገናኛ (Authentication Sync Node) ---
+function linkAccount() {
+    const phone = document.getElementById("headerPhoneInput").value.trim();
+    const pin = document.getElementById("headerPinInput").value.trim();
+    
+    if (!phone || phone.length < 10) {
+        showToast("ትክክለኛ ስልክ ቁጥር ያስገቡ!", false);
+        return;
+    }
+    if (pin.length !== 4) {
+        showToast("ባለ 4 አሃዝ PIN ያስገቡ!", false);
+        return;
+    }
+    
+    currentUserPhone = phone;
+    if (!database.users[phone]) {
+        database.users[phone] = { credits: 5, isAdmin: phone === "0900000000" };
+        database.logs.unshift({ type: "plus", amt: 5, note: "New Device Linked", date: "ახლახანს" });
+    }
+    
+    userCredits = database.users[phone].credits;
+    
+    document.querySelector(".account-bar").style.display = "none";
+    document.getElementById("logoutBtn").style.display = "block";
+    
+    showToast("አካውንትዎ በተሳካ ሁኔታ ተገናኝቷል!");
+    syncUIWithState();
+    loadUserWorkspace();
+}
+
+function logOutAccount() {
+    currentUserPhone = null;
+    userCredits = 2;
+    document.querySelector(".account-bar").style.display = "flex";
+    document.getElementById("logoutBtn").style.display = "none";
+    document.getElementById("headerPhoneInput").value = "";
+    document.getElementById("headerPinInput").value = "";
+    
+    showToast("ተለያይተዋል / Logged Out");
+    syncUIWithState();
+    loadUserWorkspace();
+}
+
+function syncUIWithState() {
+    document.getElementById("creditDisplay").innerText = userCredits;
+    document.getElementById("lblUserWorkspace").innerText = currentUserPhone ? currentUserPhone : "Guest";
+    document.getElementById("lowCreditBanner").style.display = userCredits <= 1 ? "flex" : "none";
+    
+    // አስተዳዳሪ ከሆነ የመቆጣጠሪያ ፓነል ማሳያ
+    const adminPanel = document.getElementById("adminTerminal");
+    if (currentUserPhone && database.users[currentUserPhone]?.isAdmin) {
+        adminPanel.style.display = "block";
+        renderAdminRequests();
+    } else {
+        adminPanel.style.display = "none";
+    }
+    
+    // የክሬዲት ታሪክ ሪፖርት ማሳያ
+    const logBox = document.getElementById("creditLogsContainer");
+    logBox.innerHTML = database.logs.map(log => `
+        <div class="log-item">
+            <span>${log.note} (${log.date})</span>
+            <b class="${log.type}">${log.type === 'plus' ? '+' : '-'}${log.amt}</b>
+        </div>
+    `).join('');
+}
+
+// --- የግብአት ማጽጃ እና ቆጣሪዎች (Input Handlers) ---
+function updateLyricsCounters() {
+    const text = document.getElementById("lyricsInput").value;
+    const chars = text.length;
+    const words = text.trim() === "" ? 0 : text.trim().split(/\s+/).length;
+    document.getElementById("lyricsCounter").innerText = `${chars} ፊደላት | ${words} ቃላት`;
+}
+
+function clearBoxContent(id) {
+    document.getElementById(id).value = "";
+}
+
+function copyBoxContent(id) {
+    const el = document.getElementById(id);
+    el.select();
+    document.execCommand("copy");
+    showToast("ወደ ቅንጥብ ሰሌዳ ተገልብጧል!");
+}
+
+function cleanInputText(id) {
+    const el = document.getElementById(id);
+    el.value = el.value.replace(/[<>]/g, ""); // መሰረታዊ የኤክስኤስኤስ መከላከያ
+}
+
+// --- AI ረዳት ፈጠራዎች (Generative Stubs) ---
+function generateAILyrics() {
+    const samples = [
+        "የጭቅጭቃው ንጉስ ልቤን ሰረቀው\nበአባይ ማዕበል ፍቅሩ አጠመቀው\nናና ፍቅር ናና የኔ ፀሀይ\nካንተ ሌላማ አላይም በሰማይ",
+        "በኢትዮ-ጃዝ ዜማ ትዝታ ሲቆሰቁስ\nነፍሴ ትበራለች ልክ እንደ ክንፈ-ርግብ\nካፌ ቶምቦካ ላይ ትዝታሽን ሳጣጥም\nየከተማዋ መብራት ካንቺ አይበልጥም"
+    ];
+    document.getElementById("lyricsInput").value = samples[Math.floor(Math.random() * samples.length)];
+    updateLyricsCounters();
+    showToast("AI ግጥም አደባለቀልዎ!");
+}
+
+function generateAIStyle() {
+    const styles = ["Chikchika Modern Beat", "Ethio-Jazz Fusion Mood", "Afar Traditional Electro", "Guragigna Fast Synth"];
+    document.getElementById("styleInput").value = styles[Math.floor(Math.random() * styles.length)];
+    showToast("የዘፈን ስልት ተመርጧል!");
+}
+
+function generateAITitle() {
+    const titles = ["የእሸት ትዝታ", "የነፍስ ዜማ", "የበረሃው ንፋስ", "የከተማዋ ንግስት"];
+    document.getElementById("titleInput").value = titles[Math.floor(Math.random() * titles.length)];
+    showToast("ርዕስ ተፈትሏል!");
+}
+
+// ===================================================
+// 核心 - የሙዚቃ ማምረቻ እና የሰርቨር ግንኙነት (Core Core Audio Synth)
+// ===================================================
+async function generateMusic() {
+    const lyrics = document.getElementById("lyricsInput").value.trim();
+    const style = document.getElementById("styleInput").value.trim();
+    const title = document.getElementById("titleInput").value.trim() || "ያልተሰየመ ዜማ";
+    const createBtn = document.getElementById("createBtn");
+
+    if (userCredits < 1) {
+        showToast("በቂ ክሬዲት የለዎትም! እባክዎ ጥቅል ይግዙ::", false);
+        return;
+    }
+    if (!lyrics || !style) {
+        showToast("እባክዎ ግጥም እና ስልት ያስገቡ!", false);
+        return;
+    }
+
+    // የሎዲንግ ስቴት ማግበር
+    createBtn.disabled = true;
+    createBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> ኦዲዮ እየተመረተ ነው...`;
+
+    const payload = {
+        title: title,
+        style: style,
+        lyrics: lyrics,
+        user: currentUserPhone || "Guest",
+        timestamp: Date.now()
+    };
+
+    try {
+        // ወደ Make.com Webhook ጥሪ ማድረግ
+        const response = await fetch(MAKE_WEBHOOK_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) throw new Error("Server communication down.");
+
+        showToast("ዜማው በተሳካ ሁኔታ ተመርቷል!");
+    } catch (error) {
+        // የሰርቨር ግንኙነት ስህተት አያያዝ (Fallback Fallback Mode)
+        console.warn("Webhook Connection Refused. Redirecting to Sandbox fallback generator...", error);
+        showToast("የሰርቨር ግንኙነት ችግር አጋጥሟል! (Local Sandbox Mode ገብቷል)", false);
+    } finally {
+        // ክሬዲት መቀነስና ዳታቤዝ ማደስ
+        userCredits--;
+        if (currentUserPhone && database.users[currentUserPhone]) {
+            database.users[currentUserPhone].credits = userCredits;
+        }
+        
+        database.songs.unshift({
+            id: "s_" + Date.now(),
+            title: title,
+            style: style,
+            lyrics: lyrics,
+            phone: currentUserPhone || "Guest",
+            fav: false,
+            trash: false,
+            timestamp: Date.now()
+        });
+        
+        database.logs.unshift({ type: "minus", amt: 1, note: `Synthesized: ${title}`, date: "አሁን" });
+        
+        saveDatabaseToStorage();
+        syncUIWithState();
+        loadUserWorkspace();
+
+        // በተኑን ወደ መደበኛ መመለስ
+        createBtn.disabled = false;
+        createBtn.innerHTML = `<i class="fa-solid fa-music"></i> Synthesize Audio / ዜማ ፍጠር`;
+    }
+}
+
+// --- የሙዚቃ ማህደር ስራዎች (Workspace Manager) ---
+function loadUserWorkspace() {
+    const listContainer = document.getElementById("workspaceList");
+    const searchKey = document.getElementById("workspaceSearchInput").value.toLowerCase();
+    const genreFilter = document.getElementById("genreFilterSelect").value;
+    const sortOrder = document.getElementById("sortFilterSelect").value;
+    
+    const owner = currentUserPhone || "Guest";
+    let filteredSongs = database.songs.filter(s => s.phone === owner);
+
+    // ታብ ማጣሪያ
+    if (activeTab === 'fav') filteredSongs = filteredSongs.filter(s => s.fav && !s.trash);
+    else if (activeTab === 'trash') filteredSongs = filteredSongs.filter(s => s.trash);
+    else filteredSongs = filteredSongs.filter(s => !s.trash);
+
+    // የፍለጋ ማጣሪያ
+    if (searchKey) {
+        filteredSongs = filteredSongs.filter(s => s.title.toLowerCase().includes(searchKey) || s.style.toLowerCase().includes(searchKey));
+    }
+
+    // የዘውግ ማጣሪያ
+    if (genreFilter !== "all") {
+        filteredSongs = filteredSongs.filter(s => s.style.toLowerCase().includes(genreFilter.toLowerCase()));
+    }
+
+    // ቅደም ተከተል ማስተካከያ
+    if (sortOrder === "oldest") filteredSongs.sort((a,b) => a.timestamp - b.timestamp);
+    else filteredSongs.sort((a,b) => b.timestamp - a.timestamp);
+
+    if (filteredSongs.length === 0) {
+        listContainer.innerHTML = `<div style="text-align:center; padding:40px; color:var(--text-muted); font-size:13px;"><i class="fa-solid fa-folder-open" style="font-size:24px; margin-bottom:8px;"></i><br>ምንም የተገኘ ሙዚቃ የለም</div>`;
+        return;
+    }
+
+    listContainer.innerHTML = filteredSongs.map(song => `
+        <div class="song-card" id="card-${song.id}">
+            <div class="song-core-row">
+                <div class="song-info-block">
+                    <button class="play-btn" onclick="togglePlayAudio('${song.id}')" id="pBtn-${song.id}"><i class="fa-solid fa-play"></i></button>
+                    <div>
+                        <div class="song-title">${song.title}</div>
+                        <div class="song-meta">${song.style} • <span style="color:var(--accent-orange)">★ Gen AI</span></div>
+                    </div>
+                </div>
+                <div class="action-btn-group">
+                    <button class="fav-btn ${song.fav ? 'active' : ''}" onclick="toggleFavoriteSong('${song.id}')"><i class="fa-solid fa-heart"></i></button>
+                    <a href="#" class="download-btn" onclick="showToast('ማውረድ ተጀምሯል...'); return false;"><i class="fa-solid fa-arrow-down"></i></a>
+                    <button class="trash-btn" onclick="toggleTrashSong('${song.id}')"><i class="fa-solid ${song.trash ? 'fa-trash-arrow-up' : 'fa-trash-can'}"></i></button>
+                </div>
+            </div>
+            <div class="player-timeline" id="timeline-${song.id}">
+                <div class="waveform-container">
+                    ${Array(24).fill(0).map(() => `<div class="wave-bar"></div>`).join('')}
+                </div>
+                <div class="timeline-controls-row">
+                    <span class="time-label">0:00</span>
+                    <input type="range" class="timeline-slider" value="0" max="100" oninput="handleTimelineDrag('${song.id}')">
+                    <span class="time-label">2:42</span>
+                    <span class="speed-badge" onclick="showToast('የማጫወት ፍጥነት: 1.25x')">1.0x</span>
+                </div>
+            </div>
+        </div>
+    `).join('');
+}
+
+function switchWorkspaceTab(tab) {
+    activeTab = tab;
+    document.querySelectorAll(".tab-btn").forEach(btn => btn.classList.remove("active"));
+    document.getElementById(`tab-${tab}`).classList.add("active");
+    loadUserWorkspace();
+}
+
+function filterWorkspaceSongs() {
+    loadUserWorkspace();
+}
+
+function handleSearchKey(e) {
+    if (e.key === 'Enter') {
+        const val = document.getElementById("workspaceSearchInput").value.trim();
+        if (val) {
+            const historyBox = document.getElementById("searchHistoryTags");
+            const tag = document.createElement("span");
+            tag.className = "history-tag";
+            tag.innerText = val;
+            tag.onclick = () => { document.getElementById("workspaceSearchInput").value = val; loadUserWorkspace(); };
+            historyBox.appendChild(tag);
+        }
+    }
+}
+
+// --- ኦዲዮ ማጫወቻ ሲስተም (Simulated Player Engine) ---
+let currentlyPlayingId = null;
+let playInterval = null;
+
+function togglePlayAudio(id) {
+    const card = document.getElementById(`card-${id}`);
+    const btn = document.getElementById(`pBtn-${id}`);
+    const timeline = document.getElementById(`timeline-${id}`);
+    const waveBars = timeline.querySelectorAll(".wave-bar");
+    const slider = timeline.querySelector(".timeline-slider");
+    
+    if (currentlyPlayingId && currentlyPlayingId !== id) {
+        // የቀድሞውን ማቆም
+        togglePlayAudio(currentlyPlayingId);
+    }
+
+    if (currentlyPlayingId === id) {
+        // ማቆም (Pause)
+        clearInterval(playInterval);
+        btn.innerHTML = `<i class="fa-solid fa-play"></i>`;
+        btn.classList.remove("playing");
+        timeline.style.display = "none";
+        waveBars.forEach(b => b.classList.remove("animating"));
+        currentlyPlayingId = null;
+    } else {
+        // ማጫወት (Play)
+        currentlyPlayingId = id;
+        btn.innerHTML = `<i class="fa-solid fa-pause"></i>`;
+        btn.classList.add("playing");
+        timeline.style.display = "flex";
+        waveBars.forEach(b => b.classList.add("animating"));
+        
+        playInterval = setInterval(() => {
+            let val = parseInt(slider.value);
+            if (val >= 100) {
+                slider.value = 0;
+                togglePlayAudio(id);
+            } else {
+                slider.value = val + 1;
+                // ሞገድ አኒሜሽን መምታት
+                waveBars.forEach(b => {
+                    b.style.height = Math.floor(Math.random() * 24) + "px";
+                });
+            }
+        }, 300);
+    }
+}
+
+function handleTimelineDrag(id) {
+    // ታይምላይን በእጅ ሲጎተት
+}
+
+function toggleFavoriteSong(id) {
+    const song = database.songs.find(s => s.id === id);
+    if (song) {
+        song.fav = !song.fav;
+        saveDatabaseToStorage();
+        loadUserWorkspace();
+        showToast(song.fav ? "ወደ ተወዳጅ ዝርዝር ተጨምሯል!" : "ከተወዳጅ ዝርዝር ወጥቷል!");
+    }
+}
+
+function toggleTrashSong(id) {
+    const song = database.songs.find(s => s.id === id);
+    if (song) {
+        if (song.trash) {
+            song.trash = false; // ከመጣያ መመለስ
+            showToast("ትራኩ ከመጣያ ቅርጫት ተመልሷል!");
+        } else {
+            song.trash = true; // መጣያ ውስጥ መክተት
+            showToast("ትራኩ ወደ መጣያ ተወስዷል!");
+        }
+        saveDatabaseToStorage();
+        loadUserWorkspace();
+    }
+}
+
+// --- ሞዳሎች (Modal Interactivity) ---
 let selectedPlan = "";
-let currentAudio = null;
-let currentPlayBtn = null;
-let activeTimelineId = null;
+
+function openPaymentModal(plan) {
+    selectedPlan = plan;
+    document.getElementById("modalPlanName").innerText = plan;
+    document.getElementById("paymentModal").classList.add("active");
+}
+
+function closePaymentModal() {
+    document.getElementById("paymentModal").classList.remove("active");
+    document.getElementById("smsInput").value = "";
+    document.getElementById("txIdInput").value = "";
+}
+
+function openTransferModal() {
+    if (!currentUserPhone) {
+        showToast("ክሬዲት ለማስተላለፍ እባክዎ አስቀድመው አካውንት ያገናኙ!", false);
+        return;
+    }
+    document.getElementById("transferModal").classList.add("active");
+}
+
+function closeTransferModal() {
+    document.getElementById("transferModal").classList.remove("active");
+}
+
+function copyTelebirrNumber() {
+    const num = document.getElementById("telebirrNumber").innerText;
+    navigator.clipboard.writeText(num);
+    showToast("የአካውንት ቁጥሩ ተገልብጧል!");
+}
+
+// --- የቴሌብር SMS መፍቻ ማሽን (Telebirr SMS RegEx Parser) ---
+function extractTxIDFromSMS() {
+    const sms = document.getElementById("smsInput").value;
+    // የቴሌብር መደበኛ የግብይት ቁጥር መፈለጊያ (e.g., PP26..., 26...)
+    const txPattern = /\b([A-Z]{2}\d{6,12}|\d{10,12})\b/; 
+    const match = sms.match(txPattern);
+    if (match) {
+        document.getElementById("txIdInput").value = match[0];
+        showToast("የግብይት ቁጥሩ (TxID) በራስ-ሰር ተገኝቷል!");
+    }
+}
+
+function submitPaymentDetails() {
+    const txId = document.getElementById("txIdInput").value.trim();
+    if (!txId) {
+        showToast("እባክዎ የግብይት ቁጥር ያስገቡ ወይም SMS ይለጥፉ!", false);
+        return;
+    }
+    
+    const request = {
+        id: "req_" + Date.now(),
+        phone: currentUserPhone || "Guest/Anonymous",
+        plan: selectedPlan,
+        txId: txId,
+        timestamp: new Date().toLocaleTimeString()
+    };
+    
+    database.payments.push(request);
+    saveDatabaseToStorage();
+    closePaymentModal();
+    showToast("ማረጋገጫው ቀርቧል! በአስተዳዳሪ ሲፈቀድ ይሞላል::");
+    syncUIWithState();
+}
+
+function executeCreditTransfer() {
+    const targetPhone = document.getElementById("transferPhoneInput").value.trim();
+    const amt = parseInt(document.getElementById("transferAmountInput").value);
+    
+    if (!targetPhone || amt < 1) {
+        showToast("እባክዎ ትክክለኛ ቁጥር እና መጠን ያስገቡ!", false);
+        return;
+    }
+    if (userCredits < amt) {
+        showToast("በቂ የማስተላለፊያ ክሬዲት የለዎትም!", false);
+        return;
+    }
+    
+    userCredits -= amt;
+    if (database.users[currentUserPhone]) database.users[currentUserPhone].credits = userCredits;
+    
+    database.logs.unshift({ type: "minus", amt: amt, note: `Transferred to ${targetPhone}`, date: "አሁን" });
+    saveDatabaseToStorage();
+    closeTransferModal();
+    showToast(`ለ ${targetPhone} ቁጥር ${amt} ክሬዲት ተላልፏል!`);
+    syncUIWithState();
+}
+
+// --- የአስተዳዳሪ አፕሩቫል ሲስተም (Admin Control Functions) ---
+function renderAdminRequests() {
+    const container = document.getElementById("adminRequestList");
+    if (database.payments.length === 0) {
+        container.innerHTML = `<div style="font-size:12px; color:var(--text-muted); padding:10px;">ምንም በመጠባበቅ ላይ ያለ ትዕዛዝ የለም</div>`;
+        return;
+    }
+    
+    container.innerHTML = database.payments.map(req => `
+        <div class="admin-item">
+            <div>
+                <div style="font-size:13px; font-weight:bold;">${req.phone} (${req.plan})</div>
+                <div style="font-size:11px; color:var(--text-muted);">TxID: ${req.txId} | Time: ${req.timestamp}</div>
+            </div>
+            <button class="approve-btn" onclick="approveOrder('${req.id}')">Approve</button>
+        </div>
+    `).join('');
+}
+
+function approveOrder(reqId) {
+    const idx = database.payments.findIndex(r => r.id === reqId);
+    if (idx !== -1) {
+        const req = database.payments[idx];
+        const creditsToAdd = req.plan.includes("90") ? 90 : 30;
+        
+        if (req.phone !== "Guest/Anonymous" && database.users[req.phone]) {
+            database.users[req.phone].credits += creditsToAdd;
+            if (req.phone === currentUserPhone) userCredits = database.users[req.phone].credits;
+        } else {
+            // ስልክ ካልተገናኘ ለጊዜው ለጌስት ይጨመር
+            userCredits += creditsToAdd;
+        }
+        
+        database.logs.unshift({ type: "plus", amt: creditsToAdd, note: `Approved: ${req.plan}`, date: "አሁን" });
+        database.payments.splice(idx, 1);
+        saveDatabaseToStorage();
+        showToast("ትዕዛዙ ፀድቋል! ክሬዲት ተሞልቷል::");
+        syncUIWithState();
+    }
+}
 let currentTabFilter = "all";
 let currentLang = localStorage.getItem("app_lang") || "am";
 let searchHistory = [];

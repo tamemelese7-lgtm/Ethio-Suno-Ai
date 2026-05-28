@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="am">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ethio Suno - Enterprise AI Studio</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --bg-main: #08080c;
+            --bg-card: #111118;
+            --bg-input: #181824;
+            --accent-orange: #ff5e00;
+            --accent-glow: rgba(255, 94, 0, 0.4);
+            --accent-green: #1db954;
+            --text-main: #ffffff;
+            --text-muted: #8e8e9f;
+            --border-color: #222232;
+        }
+
+        [data-theme="light"] {
+            --bg-main: #f4f4f9;
+            --bg-card: #ffffff;
+            --bg-input: #f0f0f5;
+            --accent-orange: #ff5e00;
+            --accent-glow: rgba(255, 94, 0, 0.2);
+            --accent-green: #1db954;
+            --text-main: #111118;
+            --text-muted: #62627a;
+            --border-color: #d1d1e0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: var(--bg-main);
+            color: var(--text-main);
+            margin: 0; padding: 0;
+            display: flex; flex-direction: column; min-height: 100vh;
+            transition: background 0.3s, color 0.3s;
+        }
+
+        header {
+            background-color: rgba(17, 17, 24, 0.85);
+            backdrop-filter: blur(12px);
+            padding: 16px 32px;
+            display: flex; justify-content: space-between; align-items: center;
+            border-bottom: 1px solid var(--border-color);
+            position: sticky; top: 0; z-index: 1000;
+        }
+        [data-theme="light"] header { background-color: rgba(255, 255, 255, 0.85); }
+
+        .brand-logo { font-size: 24px; font-weight: 900; }
+        .brand-logo span { color: var(--accent-orange); text-shadow: 0 0 15px var(--accent-glow); }
+
+        .header-controls { display: flex; gap: 16px; align-items: center; }
+
+        .theme-btn, .lang-btn {
+            background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-main);
+            height: 40px; padding: 0 12px; border-radius: 12px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: bold;
+        }
+        .theme-btn { width: 40px; padding: 0; }
+
+        .account-bar { 
+            display: flex; background: var(--bg-input); padding: 4px 6px; 
+            border-radius: 14px; border: 1px solid var(--border-color); gap: 4px;
+        }
+        .account-bar input {
+            background: transparent; border: none; padding: 8px 12px; 
+            color: var(--text-main); font-size: 14px; width: 130px; outline: none;
+        }
+        .account-bar input::placeholder { color: var(--text-muted); }
+        .account-bar button {
+            background: var(--accent-orange); border: none; color: white;
+            padding: 8px 16px; border-radius: 10px; cursor: pointer; font-size: 13px; font-weight: 700;
+        }
+
+        .logout-btn {
+            background: transparent; border: 1px solid rgba(244, 67, 54, 0.3);
+            color: #f44336; padding: 10px 14px; border-radius: 12px; cursor: pointer;
+            font-size: 13px; font-weight: 600;
+        }
+
+        .user-profile {
+            background: var(--bg-card); padding: 10px 18px; border-radius: 50px;
+            font-size: 14px; border: 1px solid var(--border-color); display: flex; align-items: center; gap: 10px;
+            font-weight: 700;
+        }
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+        .status-guest { background: #ff9500; box-shadow: 0 0 10px #ff9500; }
+        .status-active { background: var(--accent-green); box-shadow: 0 0 10px var(--accent-green); }
+
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(3, 3, 5, 0.85); display: none;
+            justify-content: center; align-items: center; z-index: 5000;
+            backdrop-filter: blur(15px); opacity: 0; transition: opacity 0.3s ease;
+        }
+        .modal-overlay.active { opacity: 1; display: flex; }
+
+        .modal-box {
+            background: var(--bg-card); border: 1px solid var(--border-color);
+            padding: 36px; border-radius: 32px; width: 95%; max-width: 500px;
+            box-shadow: 0 32px 64px rgba(0,0,0,0.5); box-sizing: border-box;
+            transform: scale(0.92); transition: transform 0.3s ease; position: relative;
+        }
+        .modal-overlay.active .modal-box { transform: scale(1); }
+
+        .close-modal { position: absolute; top: 24px; right: 24px; font-size: 24px; color: var(--text-muted); cursor: pointer; }
+        
+        .checkout-layout { display: flex; gap: 16px; margin: 20px 0; align-items: center; }
+        .qr-card {
+            width: 100px; height: 100px; background: white; border-radius: 14px;
+            display: flex; align-items: center; justify-content: center; padding: 6px; box-sizing: border-box;
+        }
+        .qr-card img { width: 100%; height: 100%; }
+
+        .merchant-card {
+            background: rgba(255, 94, 0, 0.03); border: 1px solid rgba(255, 94, 0, 0.15);
+            padding: 12px; border-radius: 14px; flex: 1;
+        }
+        .telebirr-row { display: flex; justify-content: space-between; align-items: center; margin-top: 6px; background: var(--bg-input); padding: 8px 12px; border-radius: 10px; }
+        .copy-btn { background: transparent; border: none; color: var(--accent-orange); cursor: pointer; font-size: 13px; font-weight: 700; }
+
+        .modal-box label { display: block; font-size: 11px; color: var(--text-muted); margin-bottom: 6px; text-transform: uppercase; font-weight: 700; }
+        
+        .sms-box {
+            width: 100%; height: 60px; padding: 12px; background: var(--bg-input);
+            border: 1px dashed rgba(255, 94, 0, 0.3); border-radius: 12px; color: var(--text-main);
+            font-size: 13px; outline: none; resize: none; box-sizing: border-box; margin-bottom: 12px;
+        }
+
+        .modal-box input {
+            width: 100%; padding: 14px 16px; background: var(--bg-input);
+            border: 1px solid var(--border-color); border-radius: 14px;
+            color: var(--text-main); margin-bottom: 16px; font-size: 15px; box-sizing: border-box; outline: none;
+        }
+
+        .main-layout { display: grid; grid-template-columns: 460px 1fr; flex: 1; height: calc(100vh - 80px); }
+
+        @media (max-width: 1024px) {
+            .main-layout { grid-template-columns: 1fr; height: auto; }
+        }
+
+        .create-panel { padding: 32px; border-right: 1px solid var(--border-color); overflow-y: auto; box-sizing: border-box; }
+        .panel-title { font-size: 20px; font-weight: 800; margin-bottom: 24px; display: flex; align-items: center; justify-content: space-between; }
+
+        .credit-alert-banner {
+            background: rgba(255, 94, 0, 0.08); border: 1px solid rgba(255, 94, 0, 0.3);
+            border-radius: 16px; padding: 14px; margin-bottom: 20px; font-size: 13px;
+            display: none; align-items: center; gap: 12px; color: #ffb07c;
+        }
+
+        .input-box { background-color: var(--bg-card); border: 1px solid var(--border-color); border-radius: 20px; padding: 20px; margin-bottom: 20px; position: relative; }
+        .input-box label { display: block; font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 12px; letter-spacing: 0.5px; }
+
+        .ai-prompt-btn {
+            position: absolute; top: 16px; right: 20px; background: rgba(255, 94, 0, 0.1);
+            color: var(--accent-orange); border: 1px solid rgba(255, 94, 0, 0.2);
+            padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 700; cursor: pointer;
+        }
+        .ai-prompt-btn:hover { background: var(--accent-orange); color: white; }
+
+        .box-actions { display: flex; gap: 12px; position: absolute; bottom: 12px; right: 20px; }
+        .action-icon { color: var(--text-muted); cursor: pointer; font-size: 13px; transition: color 0.2s; }
+        .action-icon:hover { color: var(--accent-orange); }
+
+        .counter-lbl { font-size: 11px; color: var(--text-muted); position: absolute; bottom: 12px; left: 20px; }
+
+        textarea { width: 100%; background: transparent; border: none; color: var(--text-main); font-size: 15px; outline: none; resize: none; box-sizing: border-box; transition: height 0.2s ease; }
+        .input-box input[type="text"] { width: 100%; background: transparent; border: none; color: var(--text-main); font-size: 15px; outline: none; box-sizing: border-box; }
+
+        .style-tags { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; margin-bottom: 16px; }
+        .tag { background: var(--bg-input); border: 1px solid var(--border-color); padding: 6px 14px; border-radius: 20px; font-size: 13px; cursor: pointer; }
+        .tag:hover { background: var(--accent-orange); color: #fff; }
+
+        .create-btn {
+            width: 100%; background-color: var(--accent-orange); color: white; border: none; padding: 16px; border-radius: 16px; font-size: 16px; font-weight: 700; cursor: pointer;
+            display: flex; justify-content: center; align-items: center; gap: 10px; box-shadow: 0 4px 20px var(--accent-glow);
+        }
+        .create-btn:disabled { background: var(--border-color); color: var(--text-muted); cursor: not-allowed; box-shadow: none; }
+
+        .workspace-panel { padding: 32px; overflow-y: auto; box-sizing: border-box; background-color: var(--bg-main); display: flex; flex-direction: column; gap: 32px; }
+        
+        .search-container { display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px; }
+        .search-wrapper {
+            background: var(--bg-card); border: 1px solid var(--border-color);
+            border-radius: 14px; padding: 10px 16px; display: flex; align-items: center; gap: 12px;
+        }
+        .search-wrapper input { background: transparent; border: none; color: var(--text-main); font-size: 14px; outline: none; width: 100%; }
+
+        .filter-row { display: flex; gap: 10px; flex-wrap: wrap; }
+        .filter-select {
+            background: var(--bg-card); border: 1px solid var(--border-color); color: var(--text-main);
+            padding: 10px 14px; border-radius: 12px; font-size: 13px; outline: none; cursor: pointer; flex: 1; min-width: 120px;
+        }
+
+        .search-history-box { display: flex; flex-wrap: wrap; gap: 6px; padding: 2px 4px; }
+        .history-tag { font-size: 11px; background: var(--bg-input); color: var(--text-muted); padding: 4px 10px; border-radius: 6px; cursor: pointer; border: 1px solid var(--border-color); }
+        .history-tag:hover { border-color: var(--accent-orange); color: var(--text-main); }
+
+        .workspace-tabs { display: flex; gap: 12px; margin-bottom: 16px; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; justify-content: space-between; align-items: center; }
+        .tab-btn-group { display: flex; gap: 12px; }
+        .tab-btn { background: transparent; border: none; color: var(--text-muted); font-size: 14px; font-weight: 700; cursor: pointer; padding: 6px 12px; border-radius: 8px; }
+        .tab-btn.active { color: var(--accent-orange); background: rgba(255, 94, 0, 0.08); }
+
+        .song-list { display: flex; flex-direction: column; gap: 14px; }
+        
+        .song-card {
+            background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 18px; padding: 18px;
+            display: flex; flex-direction: column; gap: 12px; position: relative;
+        }
+        .song-core-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+        .song-info-block { display: flex; align-items: center; gap: 16px; flex: 1; }
+        
+        .play-btn {
+            width: 54px; height: 54px; background: var(--bg-input); border-radius: 14px;
+            display: flex; align-items: center; justify-content: center; color: var(--accent-orange);
+            font-size: 20px; border: 1px solid var(--border-color); cursor: pointer;
+        }
+        .playing { color: var(--accent-green); border-color: var(--accent-green); }
+
+        .song-title { font-weight: 700; font-size: 16px; margin-bottom: 4px; }
+        .song-meta { font-size: 13px; color: var(--text-muted); }
+        
+        .action-btn-group { display: flex; align-items: center; gap: 10px; }
+        .download-btn {
+            background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-main);
+            width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+            cursor: pointer; text-decoration: none; font-size: 14px;
+        }
+        .fav-btn, .trash-btn { background: transparent; border: none; color: var(--text-muted); cursor: pointer; font-size: 15px; padding: 6px; }
+        .fav-btn.active { color: #e91e63; }
+        .trash-btn:hover { color: #f44336; }
+
+        .player-timeline { display: none; align-items: center; gap: 10px; background: var(--bg-input); padding: 12px; border-radius: 12px; flex-direction: column; }
+        .timeline-controls-row { display: flex; width: 100%; align-items: center; gap: 10px; }
+        .timeline-slider { flex: 1; -webkit-appearance: none; appearance: none; height: 4px; background: #2c2c3c; border-radius: 2px; outline: none; cursor: pointer; }
+        .timeline-slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 10px; height: 10px; background: var(--accent-orange); border-radius: 50%; }
+        .time-label { font-size: 11px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+
+        .speed-badge {
+            background: var(--bg-card); border: 1px solid var(--border-color); color: var(--text-muted);
+            padding: 2px 6px; border-radius: 6px; font-size: 10px; font-weight: 800; cursor: pointer; transition: all 0.2s;
+        }
+        .speed-badge:hover { color: var(--accent-orange); border-color: var(--accent-orange); }
+
+        .waveform-container {
+            display: flex; gap: 3px; height: 24px; align-items: center; width: 100%; justify-content: center; margin-top: 4px;
+        }
+        .wave-bar { width: 3px; height: 4px; background: var(--accent-orange); border-radius: 2px; transition: height 0.15s ease; }
+        .wave-bar.animating { animation: waveMotion 1s ease-in-out infinite alternate; }
+        @keyframes waveMotion { 0% { height: 4px; } 100% { height: 24px; } }
+
+        .pricing-section { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 24px; padding: 24px; margin-top: 24px; }
+        .pricing-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
+        .price-card { border: 1px solid var(--border-color); background: var(--bg-input); padding: 20px; border-radius: 16px; text-align: center; cursor: pointer; transition: all 0.2s; }
+        .price-card:hover { border-color: var(--accent-orange); transform: translateY(-3px); }
+        .price-amt { font-size: 24px; font-weight: 900; margin-top: 4px; }
+        
+        .history-section { border-top: 1px dashed var(--border-color); margin-top: 16px; padding-top: 16px; }
+        .log-item { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-muted); padding: 4px 0; }
+        .log-item b.plus { color: var(--accent-green); }
+        .log-item b.minus { color: #f44336; }
+
+        .toast-container {
+            position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(40px);
+            background: #111118; border: 1px solid var(--accent-orange); color: white;
+            padding: 14px 28px; border-radius: 30px; font-size: 14px; font-weight: 700;
+            display: flex; align-items: center; gap: 10px; z-index: 9999;
+            box-shadow: 0 10px 30px var(--accent-glow); opacity: 0; pointer-events: none;
+            transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.3s;
+        }
+        .toast-container.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+        .admin-section { background: rgba(255, 94, 0, 0.02); border: 1px dashed var(--accent-orange); border-radius: 24px; padding: 24px; margin-top: 20px; display: none; }
+        .admin-badge { background: var(--accent-orange); color: white; font-size: 11px; padding: 2px 8px; border-radius: 10px; font-weight: 800; text-transform: uppercase; }
+        .admin-item { display: flex; justify-content: space-between; align-items: center; padding: 12px; background: var(--bg-card); border-radius: 12px; margin-top: 10px; border: 1px solid var(--border-color); }
+        .approve-btn { background: var(--accent-green); color: white; border: none; padding: 6px 14px; border-radius: 8px; font-weight: 700; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+    <div class="toast-container" id="toastAlert">
+        <i class="fa-solid fa-circle-check" id="toastIcon" style="color:var(--accent-green)"></i>
+        <span id="toastMessage">ድርጊቱ ተፈጽሟል!</span>
+    </div>
+
+    <!-- Share Credits Modal -->
+    <div class="modal-overlay" id="transferModal">
+        <div class="modal-box">
+            <span class="close-modal" onclick="closeTransferModal()">&times;</span>
+            <h3><i class="fa-solid fa-paper-plane" style="color:var(--accent-orange)"></i> Share Credits / ክሬዲት ማስተላለፊያ</h3>
+            <label>Recipient Phone / የተቀባይ ስልክ ቁጥር</label>
+            <input type="text" id="transferPhoneInput" placeholder="e.g. 0912345678">
+            <label>Amount / የክሬዲት መጠን</label>
+            <input type="number" id="transferAmountInput" placeholder="e.g. 5" min="1">
+            <button class="create-btn" onclick="executeCreditTransfer()">አስተላልፍ</button>
+        </div>
+    </div>
+
+    <!-- Checkout Modal Box -->
+    <div class="modal-overlay" id="paymentModal">
+        <div class="modal-box">
+            <span class="close-modal" onclick="closePaymentModal()">&times;</span>
+            <h3><i class="fa-solid fa-shield-halved" style="color:var(--accent-orange)"></i> Secure Checkout</h3>
+            <p style="font-size: 14px; color: var(--text-muted); margin-bottom:12px;"><span data-i18n="planLabel">ዕቅድ፦</span> <b id="modalPlanName" style="color:var(--text-main)">---</b></p>
+            
+            <div class="checkout-layout">
+                <div class="qr-card">
+                    <img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=0912345678" alt="QR">
+                </div>
+                <div class="merchant-card">
+                    <div style="font-size:11px; color:var(--text-muted); font-weight:800; text-transform:uppercase;">Telebirr Account</div>
+                    <div class="telebirr-row">
+                        <div><b id="telebirrNumber" style="font-size:15px; color:var(--text-main);">0912345678</b></div>
+                        <button class="copy-btn" onclick="copyTelebirrNumber()">Copy</button>
+                    </div>
+                </div>
+            </div>
+
+            <label data-i18n="smsLabel">Smart Paste / የቴሌብር SMS መለጠፊያ</label>
+            <textarea class="sms-box" id="smsInput" oninput="extractTxIDFromSMS()" placeholder="ከቴሌብር የደረሰዎትን ሙሉ መልዕክት እዚህ ላይ ቢለጥፉት..."></textarea>
+
+            <label data-i18n="txLabel">Transaction ID / የግብይት ቁጥር</label>
+            <input type="text" id="txIdInput" placeholder="e.g. PP260528...">
+
+            <button class="create-btn" id="confirmPaymentBtn" onclick="submitPaymentDetails()" data-i18n="submitBtn">ማረጋገጫ አቅርብ</button>
+        </div>
+    </div>
+
+    <!-- Header Dashboard -->
+    <header>
+        <div class="brand-logo"><i class="fa-solid fa-wand-magic-sparkles" style="color:var(--accent-orange)"></i> Ethio <span>Suno</span></div>
+        <div class="header-controls">
+            <button class="lang-btn" onclick="toggleLanguage()" id="langBtn">EN</button>
+            <button class="theme-btn" onclick="toggleAppTheme()" title="Theme Mode"><i class="fa-solid fa-moon" id="themeIcon"></i></button>
+            
+            <div class="account-bar">
+                <input type="text" id="headerPhoneInput" placeholder="የስልክ ቁጥር ያስገቡ">
+                <input type="password" id="headerPinInput" placeholder="PIN" maxlength="4" style="width:60px; border-left:1px solid var(--border-color);">
+                <button onclick="linkAccount()">Sync Node</button>
+            </div>
+            <button class="logout-btn" id="logoutBtn" onclick="logOutAccount()" style="display:none;"><i class="fa-solid fa-power-off"></i></button>
+            
+            <div class="user-profile">
+                <span class="status-dot" id="statusDot"></span>
+                <span>Credits: <b id="creditDisplay">2</b></span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Workspace Layout Grid -->
+    <div class="main-layout">
+        <div class="create-panel">
+            <div class="panel-title">
+                <span><i class="fa-solid fa-sliders" style="color:var(--accent-orange)"></i> Studio Console</span>
+                <button onclick="openTransferModal()" style="background:rgba(255,94,0,0.1); border:1px solid var(--accent-orange); color:white; padding:6px 12px; border-radius:10px; font-size:12px; cursor:pointer;"><i class="fa-solid fa-share-nodes"></i> Share</button>
+            </div>
+            
+            <div class="credit-alert-banner" id="lowCreditBanner">
+                <i class="fa-solid fa-triangle-exclamation" style="font-size:18px; color:var(--accent-orange)"></i>
+                <div data-i18n="lowCredit">የማምረቻ ክሬዲትዎ እያለቀ ነው! እባክዎ ከታች ጥቅል በመግዛት አካውንቶን ይሙሉ::</div>
+            </div>
+
+            <div class="input-box" style="padding-bottom: 40px;">
+                <label data-i18n="lyricsTitle">Lyrics / የዘፈን ግጥም</label>
+                <button class="ai-prompt-btn" onclick="generateAILyrics()"><i class="fa-solid fa-robot"></i> Mix Lyrics</button>
+                <textarea id="lyricsInput" rows="4" oninput="updateLyricsCounters()" onblur="cleanInputText('lyricsInput')" placeholder="የዘፈኑን ግጥም እዚህ ያስገቡ..."></textarea>
+                <div class="counter-lbl" id="lyricsCounter">0 ፊደላት | 0 ቃላት</div>
+                <div class="box-actions">
+                    <i class="fa-solid fa-copy action-icon" onclick="copyBoxContent('lyricsInput')" title="Copy All"></i>
+                    <i class="fa-solid fa-trash-can action-icon" onclick="clearBoxContent('lyricsInput'); updateLyricsCounters();" title="Clear"></i>
+                </div>
+            </div>
+            
+            <div class="input-box" style="padding-bottom: 40px;">
+                <label data-i18n="styleTitle">Vibe & Genre / ስልት</label>
+                <button class="ai-prompt-btn" onclick="generateAIStyle()"><i class="fa-solid fa-wand-magic"></i> AI Style</button>
+                <input type="text" id="styleInput" onblur="cleanInputText('styleInput')" placeholder="e.g., Chikchika, Ethio-Jazz">
+                <div class="box-actions">
+                    <i class="fa-solid fa-trash-can action-icon" onclick="clearBoxContent('styleInput')" title="Clear"></i>
+                </div>
+                <div class="style-tags">
+                    <span class="tag" onclick="document.getElementById('styleInput').value='Chikchika'; cleanInputText('styleInput');" data-i18n="tagChikchika">ጭቅጭቃ</span>
+                    <span class="tag" onclick="document.getElementById('styleInput').value='Ethio-Jazz'; cleanInputText('styleInput');" data-i18n="tagJazz">ኢትዮ-ጃዝ</span>
+                </div>
+            </div>
+            
+            <div class="input-box">
+                <label data-i18n="trackTitleLabel">Track Title / ርዕስ</label>
+                <button class="ai-prompt-btn" onclick="generateAITitle()"><i class="fa-solid fa-heading"></i> AI Title</button>
+                <input type="text" id="titleInput" placeholder="የዘፈኑ ርዕስ...">
+            </div>
+            
+            <button class="create-btn" id="createBtn" onclick="generateMusic()"><i class="fa-solid fa-music"></i> Synthesize Audio / ዜማ ፍጠር</button>
+
+            <div class="pricing-section">
+                <h3 style="margin-top:0; font-size:14px; color:var(--text-muted); text-transform:uppercase;" data-i18n="topUpLabel">Top-Up Credits</h3>
+                <div class="pricing-grid">
+                    <div class="price-card" onclick="openPaymentModal('Pro - 30 Credits')">
+                        <div style="font-size:13px; color:var(--text-muted);">30 Tracks</div>
+                        <div class="price-amt">100 ETB</div>
+                    </div>
+                    <div class="price-card" onclick="openPaymentModal('Elite - 90 Credits')">
+                        <div style="font-size:13px; color:var(--accent-orange)">90 Tracks</div>
+                        <div class="price-amt" style="color:var(--accent-orange)">250 ETB</div>
+                    </div>
+                </div>
+
+                <div class="history-section">
+                    <div style="font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase; margin-bottom:8px;" data-i18n="statementLabel">Credit Statement / የክሬዲት ታሪክ</div>
+                    <div id="creditLogsContainer"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="workspace-panel">
+            <div class="admin-section" id="adminTerminal">
+                <div class="panel-title" style="font-size: 16px;"><i class="fa-solid fa-lock-open"></i> Admin Order Approver <span class="admin-badge">Live Control</span></div>
+                <div id="adminRequestList"></div>
+            </div>
+
+            <div>
+                <div class="panel-title"><i class="fa-solid fa-folder-open" style="color:var(--accent-green)"></i> <span data-i18n="workspaceTitle">የሙዚቃ ማህደሬ</span> (<span id="lblUserWorkspace">Guest</span>)</div>
+                
+                <div class="search-container">
+                    <div class="search-wrapper">
+                        <i class="fa-solid fa-magnifying-glass" style="color:var(--text-muted)"></i>
+                        <input type="text" id="workspaceSearchInput" onkeydown="handleSearchKey(event)" oninput="filterWorkspaceSongs()" placeholder="ሙዚቃዎችን በስም ፈልገው Enter ይጫኑ...">
+                    </div>
+                    <div class="filter-row">
+                        <select id="genreFilterSelect" class="filter-select" onchange="filterWorkspaceSongs()">
+                            <option value="all">All Genres / ሁሉም ስልቶች</option>
+                            <option value="Chikchika">Chikchika / ጭቅጭቃ</option>
+                            <option value="Ethio-Jazz">Ethio-Jazz / ኢትዮ-ጃዝ</option>
+                        </select>
+                        <select id="sortFilterSelect" class="filter-select" onchange="loadUserWorkspace()">
+                            <option value="newest">Newest First / አዲስ ቅድሚያ</option>
+                            <option value="oldest">Oldest First / የቆዩ ቅድሚያ</option>
+                        </select>
+                    </div>
+                    <div class="search-history-box" id="searchHistoryTags"></div>
+                </div>
+
+                <div class="workspace-tabs">
+                    <div class="tab-btn-group">
+                        <button class="tab-btn active" id="tab-all" onclick="switchWorkspaceTab('all')" data-i18n="tabAll">ሁሉም</button>
+                        <button class="tab-btn" id="tab-fav" onclick="switchWorkspaceTab('fav')" data-i18n="tabFav">ተወዳጅ 🎵</button>
+                        <button class="tab-btn" id="tab-trash" onclick="switchWorkspaceTab('trash')" data-i18n="tabTrash"><i class="fa-solid fa-trash-can"></i> መጣያ</button>
+                    </div>
+                </div>
+
+                <div class="song-list" id="workspaceList"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

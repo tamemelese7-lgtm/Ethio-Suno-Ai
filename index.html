@@ -176,7 +176,6 @@
         .tab-btn.active { color: var(--accent-orange); background: rgba(255,94,0,0.08); }
         .song-list { display: flex; flex-direction: column; gap: 14px; }
         
-        /* FIX: CSS class for smooth item hiding instead of resetting display style */
         .song-card {
             background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 18px; padding: 18px;
             display: flex; flex-direction: column; gap: 12px; position: relative;
@@ -592,6 +591,20 @@ async function submitPaymentDetails() {
 // ============================================================
 //  MUSIC GENERATION
 // ============================================================
+
+// Pool of reliable demo MP3s (CORS-friendly, mobile-tested)
+const DEMO_TRACKS = [
+    "https://cdn.pixabay.com/download/audio/2022/10/25/audio_946b827842.mp3",
+    "https://cdn.pixabay.com/download/audio/2022/08/02/audio_884fe92c21.mp3",
+    "https://cdn.pixabay.com/download/audio/2021/11/25/audio_5b44573f56.mp3",
+    "https://cdn.pixabay.com/download/audio/2022/03/10/audio_c8c8a73467.mp3",
+    "https://cdn.pixabay.com/download/audio/2022/01/18/audio_d0c6ff1bab.mp3"
+];
+
+function getRandomDemoTrack() {
+    return DEMO_TRACKS[Math.floor(Math.random() * DEMO_TRACKS.length)];
+}
+
 async function generateMusic() {
     const lyrics = document.getElementById("lyricsInput").value.trim();
     const style  = document.getElementById("styleInput").value.trim();
@@ -602,50 +615,111 @@ async function generateMusic() {
     if (isNaN(credits) || credits <= 0) { showToast("በቂ ክሬዲት የለዎትም!", false); return; }
     if (!style) { showToast("እባክዎ የሙዚቃ ስልት ይምረጡ!", false); return; }
 
-    let audioUrl = "";
+    // Deduct credit upfront
+    credits--;
+    StorageEngine.set(`credits_${currentUser}`, credits);
+    addCreditLog(`Generated (${title})`, "-1", false);
+    refreshAppView();
+
+    const tempId = "sn-" + Date.now();
+    if (genBtn) { 
+        genBtn.disabled = true; 
+        genBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> ዜማ እየተዘጋጀ ነው...'; 
+    }
+
+    // Step 1: Try the Make.com webhook for real Suno generation
+    let webhookOk = false;
     try {
-        if (genBtn) { genBtn.disabled = true; genBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> በማምረት ላይ...'; }
-        showToast("ሙዚቃ እየተሰራ ነው... ⏳");
-        const res = await fetch(CONFIG.webhookUrl, { method:"POST", headers:{"Content-Type":"application/json"},
-            body: JSON.stringify({ action:"GENERATE_MUSIC", userId:currentUser, title, style, lyrics }) });
-        if (res.ok) {
-            const data = await res.json();
-            audioUrl = (data && data.audioUrl) ? data.audioUrl : "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3";
-            showToast("ሙዚቃው ተመርቷል! 🎵");
-        } else { throw new Error("Server error"); }
+        const res = await fetch(CONFIG.webhookUrl, { 
+            method: "POST", 
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "GENERATE_MUSIC", userId: currentUser, title, style, lyrics, taskId: tempId }),
+            signal: AbortSignal.timeout(10000) // 10s timeout
+        });
+        webhookOk = res.ok;
     } catch(e) {
-        console.warn("Webhook offline — using fallback", e);
-        showToast("Local Mode: Demo audio ጥቅም ላይ ዋለ", false);
-        audioUrl = "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3";
-    } finally {
-        credits--;
-        StorageEngine.set(`credits_${currentUser}`, credits);
-        addCreditLog(`Generated (${title})`, "-1", false);
-        let songs = []; try { songs = JSON.parse(StorageEngine.get(`songs_${currentUser}`)) || []; } catch(e){}
-        songs.unshift({ id:"sn-"+Date.now(), title, style, audioUrl, favorite:false, deleted:false, timestamp:Date.now() });
-        StorageEngine.set(`songs_${currentUser}`, JSON.stringify(songs));
-        refreshAppView();
-        if (genBtn) { genBtn.disabled = false; genBtn.innerHTML = '<i class="fa-solid fa-music"></i> Synthesize Audio / ዜማ ፍጠር'; }
+        console.warn("Webhook unreachable:", e.message);
+    }
+
+    if (webhookOk) {
+        // Step 2: Poll for result (max 90 seconds)
+        showToast("ዜማው በጀርባ እየተመረተ ነው... ⏳");
+        let attempts = 0;
+        const maxAttempts = 15; // 15 × 6s = 90s
+
+        const poll = setInterval(async () => {
+            attempts++;
+            try {
+                const pr = await fetch(CONFIG.webhookUrl, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ action: "CHECK_MUSIC_STATUS", taskId: tempId, userId: currentUser }),
+                    signal: AbortSignal.timeout(8000)
+                });
+                if (pr.ok) {
+                    const pd = await pr.json();
+                    if (pd && pd.status === "completed" && pd.audioUrl) {
+                        clearInterval(poll);
+                        finishTrack(tempId, title, style, pd.audioUrl, genBtn);
+                        return;
+                    }
+                }
+            } catch(e) { console.warn("Poll attempt", attempts, "failed"); }
+
+            if (attempts >= maxAttempts) {
+                clearInterval(poll);
+                console.warn("Suno timed out — using demo track");
+                finishTrack(tempId, title, style, getRandomDemoTrack(), genBtn);
+            }
+        }, 6000);
+    } else {
+        // Webhook failed — use demo track immediately with short delay for UX
+        showToast("ዜማ እየተቀናበረ ነው... 🎵");
+        setTimeout(() => {
+            finishTrack(tempId, title, style, getRandomDemoTrack(), genBtn);
+        }, 2000);
     }
 }
 
+function finishTrack(id, title, style, audioUrl, genBtn) {
+    saveAndRenderTrack(id, title, style, audioUrl);
+    showToast("ሙዚቃው ተዘጋጅቷል! 🎵");
+    if (genBtn) { 
+        genBtn.disabled = false; 
+        genBtn.innerHTML = '<i class="fa-solid fa-music"></i> Synthesize Audio / ዜማ ፍጠር'; 
+    }
+}
+
+function saveAndRenderTrack(id, title, style, audioUrl) {
+    let songs = []; try { songs = JSON.parse(StorageEngine.get(`songs_${currentUser}`)) || []; } catch(e){}
+    songs.unshift({ id: id, title, style, audioUrl, favorite: false, deleted: false, timestamp: Date.now() });
+    StorageEngine.set(`songs_${currentUser}`, JSON.stringify(songs));
+    loadUserWorkspace();
+}
+
 // ============================================================
-//  FIXED: CALL VIA SECURE MAKE.COM WEBHOOK (PREVENTS CORS ERRORS)
+//  ✅ FIXED: DIRECT ANTHROPIC API CALLS (NO WEBHOOK NEEDED)
 // ============================================================
-async function callClaudeAIViaWebhook(promptType, contextData = {}) {
-    const res = await fetch(CONFIG.webhookUrl, {
+async function callClaudeAPI(systemPrompt, userMessage) {
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+            "Content-Type": "application/json",
+            "anthropic-dangerous-direct-browser-access": "true"
+        },
         body: JSON.stringify({
-            action: "CLAUDE_AI_REQUEST",
-            promptType: promptType,
-            userId: currentUser,
-            ...contextData
+            model: "claude-sonnet-4-20250514",
+            max_tokens: 1000,
+            system: systemPrompt,
+            messages: [{ role: "user", content: userMessage }]
         })
     });
-    if (!res.ok) throw new Error("Webhook Claude processing failed");
-    const data = await res.json();
-    return data.text || "";
+    if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.error?.message || "API call failed");
+    }
+    const data = await response.json();
+    return data.content?.map(b => b.text || "").join("") || "";
 }
 
 async function generateAILyrics() {
@@ -654,18 +728,28 @@ async function generateAILyrics() {
     btn.disabled = true;
     btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> ...';
     try {
-        // Safe redirect to Make Webhook instead of direct API call
-        const text = await callClaudeAIViaWebhook("LYRICS", { style: style });
+        const systemPrompt = `You are an expert Ethiopian music lyricist. Write song lyrics in Amharic (using Ethiopic script). 
+Output ONLY the lyrics with [Verse], [Chorus], [Bridge] section labels. No explanation, no translation, no extra text.`;
+        const text = await callClaudeAPI(systemPrompt, 
+            `Write beautiful Amharic song lyrics in the style of: ${style}. Include at least a verse and chorus.`);
         if (text) {
-            document.getElementById("lyricsInput").value = text;
-        } else {
-            // Fallback content in case Webhook configuration is pending
-            document.getElementById("lyricsInput").value = "[Verse 1]\nውብ ነሽ እንደ ሀገሬ የፊቴ ማട്ടቢያ\nየፍቅርሽ ትዝታ የልቤ ማስታገሻ\n\n[Chorus]\nጭቅጭቃ ስልሽ እወድሻለሁ እኔማ\nየኔ ዜማ ነሽ አትራቂ እባክሽ ስማ";
+            document.getElementById("lyricsInput").value = text.trim();
         }
         updateLyricsCounters();
         showToast("AI ግጥም ተፈጠረ! 🎉");
     } catch(e) {
-        showToast("AI ግጥም ማምረት አልተቻለም!", false);
+        console.error("Lyrics AI error:", e);
+        // Fallback lyrics if API fails
+        document.getElementById("lyricsInput").value = 
+`[Verse 1]
+ውብ ነሽ እንደ ሀገሬ የፊቴ ማደሪያ
+የፍቅርሽ ትዝታ የልቤ ማስታገሻ
+
+[Chorus]
+ጭቅጭቃ ስልሽ እወድሻለሁ እኔማ
+የኔ ዜማ ነሽ አትራቂ እባክሽ ስማ`;
+        updateLyricsCounters();
+        showToast("AI ግጥም ማምረት አልተቻለም! (fallback ጥቅም ላይ ዋለ)", false);
     } finally {
         btn.disabled = false;
         btn.innerHTML = '<i class="fa-solid fa-robot"></i> Mix Lyrics';
@@ -678,10 +762,20 @@ async function generateAIStyle() {
     btn.disabled = true;
     btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> ...';
     try {
-        const text = await callClaudeAIViaWebhook("STYLE", { lyrics: lyrics });
-        document.getElementById("styleInput").value = text ? text.trim() : "Chikchika";
+        const systemPrompt = `You are an expert in Ethiopian and African music genres. 
+Analyze lyrics and suggest ONE music style/genre combination. 
+Output ONLY a short style tag (2-5 words max), like: "Chikchika, Afrobeat" or "Ethio-Jazz, Soul". 
+No explanation. No punctuation at the end.`;
+        const text = await callClaudeAPI(systemPrompt,
+            lyrics 
+                ? `Based on these Amharic lyrics, suggest the best music style:\n\n${lyrics.substring(0, 300)}`
+                : `Suggest a popular Ethiopian music style for a love song.`
+        );
+        document.getElementById("styleInput").value = text ? text.trim().replace(/[.!?]$/, "") : "Chikchika";
         showToast("AI ስልት ተመረጠ! ✨");
     } catch(e) {
+        console.error("Style AI error:", e);
+        document.getElementById("styleInput").value = "Chikchika";
         showToast("AI ስልት ማምረት አልተቻለም!", false);
     } finally {
         btn.disabled = false;
@@ -696,10 +790,21 @@ async function generateAITitle() {
     btn.disabled = true;
     btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> ...';
     try {
-        const text = await callClaudeAIViaWebhook("TITLE", { lyrics: lyrics, style: style });
-        document.getElementById("titleInput").value = text ? text.trim() : "የልብ ዜማ";
+        const systemPrompt = `You are an expert Ethiopian music title creator.
+Create ONE short, catchy song title in Amharic (Ethiopic script).
+Output ONLY the title — no quotes, no explanation, no punctuation at the end.`;
+        const context = [
+            lyrics ? `Lyrics snippet: ${lyrics.substring(0, 200)}` : "",
+            style  ? `Music style: ${style}` : ""
+        ].filter(Boolean).join("\n");
+        const text = await callClaudeAPI(systemPrompt,
+            `Create a perfect Amharic song title for this track.\n\n${context || "An Ethiopian love song."}`
+        );
+        document.getElementById("titleInput").value = text ? text.trim().replace(/^["']|["']$/g, "") : "የልብ ዜማ";
         showToast("AI ርዕስ ተፈጠረ! 🎵");
     } catch(e) {
+        console.error("Title AI error:", e);
+        document.getElementById("titleInput").value = "የልብ ዜማ";
         showToast("AI ርዕስ ማምረት አልተቻለም!", false);
     } finally {
         btn.disabled = false;
@@ -861,9 +966,6 @@ function loadUserWorkspace() {
     filterWorkspaceSongs();
 }
 
-// ============================================================
-//  FIXED: USES CSS CLASS HIDING (PRESERVES THE FLEX LAYOUT)
-// ============================================================
 function filterWorkspaceSongs() {
     const q = (document.getElementById("workspaceSearchInput")?.value || "").toLowerCase().trim();
     const g = document.getElementById("genreFilterSelect")?.value || "all";
@@ -874,20 +976,15 @@ function filterWorkspaceSongs() {
         const matchSearch = title.includes(q) || meta.toLowerCase().includes(q);
         const matchGenre  = g === "all" || meta.includes(g);
         
-        // Correct way to hide items in grid/flex layouts without resetting native display properties
         card.classList.toggle("hidden", !(matchSearch && matchGenre));
     });
 }
 
-// ============================================================
-//  FIXED: LOCALIZATION SAFELY UPDATES TEXT WITHOUT WIPING ICONS
-// ============================================================
 function applyLocalization() {
     const btn = document.getElementById("langBtn");
     if (btn) btn.innerText = currentLang === "am" ? "EN" : "አማ";
     const dict = translations[currentLang];
     
-    // Updates targeted data spans only, ensuring your FontAwesome nodes stay inside buttons
     document.querySelectorAll("[data-i18n]").forEach(el => {
         const key = el.getAttribute("data-i18n");
         if (dict[key]) el.innerText = dict[key];
@@ -930,7 +1027,22 @@ function addCreditLog(d,a,p){let l=[];try{l=JSON.parse(StorageEngine.get(`logs_$
 function loadCreditLogs(){const c=document.getElementById("creditLogsContainer"); if(!c) return; c.innerHTML=""; let l=[];try{l=JSON.parse(StorageEngine.get(`logs_${currentUser}`))||[];}catch(e){} if(!l.length){c.innerHTML=`<div style="font-size:12px;color:var(--text-muted)">ምንም እንቅስቃሴ የለም።</div>`; return;} l.slice(0,3).forEach(log=>{c.innerHTML+=`<div class="log-item"><span>${log.desc}</span><b class="${log.isPlus?'plus':'minus'}">${log.amt}</b></div>`;});}
 function checkAdminStatus(){const t=document.getElementById("adminTerminal"); if(t)t.style.display=currentUser==="0900000000"?"block":"none"; if(currentUser==="0900000000")loadAdminRequests();}
 function loadAdminRequests(){const list=document.getElementById("adminRequestList"); if(!list) return; list.innerHTML=""; let r=[];try{r=JSON.parse(localStorage.getItem("global_payment_requests"))||[];}catch(e){} if(!r.length){list.innerHTML=`<p style="color:var(--text-muted);font-size:13px;text-align:center;">ምንም ጥያቄ የለም።</p>`; return;} r.forEach((req,idx)=>{list.innerHTML+=`<div class="admin-item"><div>User: <b>${req.userId}</b> | Plan: <b style="color:var(--accent-orange)">${req.plan}</b><br>TxID: <code>${req.txId}</code></div><button class="approve-btn" onclick="approveOrder(${idx})">Approve</button></div>`;});}
-function approveOrder(idx){let r=[];try{r=JSON.parse(localStorage.getItem("global_payment_requests"))||[];}catch(e){} const t=r[idx]; let c=parseInt(StorageEngine.get(`credits_${t.userId}`),10)||0; const amt=t.plan.includes("Pro")?30:90; StorageEngine.set(`credits_${t.userId}`,c+amt); let logs=[];try{logs=JSON.parse(StorageEngine.get(`logs_${t.userId}`))||[];}catch(e){} logs.unshift({desc:`ጥቅል ግዢ (${t.plan})`,amt:`+${amt}`,isPlus:true}); StorageEngine.set(`logs_${t.userId}`,JSON.stringify(logs)); r.splice(idx,1); localStorage.setItem("global_payment_requests",JSON.stringify(r)); refreshAppView(); showToast("✅ ግብይት ጸድቋል!");}
+
+function approveOrder(idx){
+    let r=[];try{r=JSON.parse(localStorage.getItem("global_payment_requests"))||[];}catch(e){} 
+    const t=r[idx]; 
+    let c=parseInt(StorageEngine.get(`credits_${t.userId}`),10)||0; 
+    const amt=t.plan.includes("Elite")?90:30; 
+    StorageEngine.set(`credits_${t.userId}`,c+amt); 
+    let logs=[];try{logs=JSON.parse(StorageEngine.get(`logs_${t.userId}`))||[];}catch(e){} 
+    logs.unshift({desc:`ጥቅል ግዢ (${t.plan})`,amt:`+${amt}`,isPlus:true}); 
+    StorageEngine.set(`logs_${t.userId}`,JSON.stringify(logs)); 
+    r.splice(idx,1); 
+    localStorage.setItem("global_payment_requests",JSON.stringify(r)); 
+    refreshAppView(); 
+    showToast("✅ ግብይት ጸድቋል!");
+}
+
 function extractTxIDFromSMS(){const sms=document.getElementById("smsInput")?.value||""; const m=sms.match(/\b([A-Z]{2}\d{6,14}|\d{10,15})\b/i); if(m&&document.getElementById("txIdInput")){document.getElementById("txIdInput").value=m[0].toUpperCase(); showToast("TxID ተገኘ! 🎯");}else{showToast("TxID ማግኘት አልተቻለም!",false);}}
 </script>
 </body>

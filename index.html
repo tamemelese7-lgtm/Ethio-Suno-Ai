@@ -423,10 +423,10 @@
 </div>
 
 <script>
+// *** የደህንነት ማስተካከያ የተደረገበት ክፍል ***
 const CONFIG = {
-    // የቀጥታ የapiframe.ai የሙዚቃ ማዘዣ URL እና አዲሱ የተተካው API KEY
-    sunoBackendUrl: "https://api.apiframe.ai/v1/music/generate",
-    apiframeApiKey: "afk_5732e313868bef6a09f13a76fc2d3bde5e48cabb",
+    // በቀጥታ ወደ Apiframe ከመደወል ይልቅ ወደ ራሳችን የቪርሴል ሰርቨር የሚሄድ አድራሻ
+    sunoBackendUrl: "/api/generate", 
     webhookUrl: "https://hook.eu1.make.com/b5gdgowiv4ih95mhrm8cds5fhd14mlmn",
     defaultCredits: 2,
     trashExpirationMs: 30 * 1000
@@ -561,6 +561,7 @@ async function submitPaymentDetails() {
     }
 }
 
+// *** ሙሉ ለሙሉ የተስተካከለው አስተማማኝ የማመንጫ ፈንክሽን ***
 async function generateMusic() {
     const lyrics = document.getElementById("lyricsInput").value.trim();
     const style  = document.getElementById("styleInput").value.trim();
@@ -574,18 +575,17 @@ async function generateMusic() {
 
     const tempId = "sn-" + Date.now();
     try {
-        if (genBtn) { genBtn.disabled = true; genBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> ዜማው ከሱኖ ጋር እየተገናኘ ነው...'; }
+        if (genBtn) { genBtn.disabled = true; genBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> ዜማው በሰርቨር በኩል እየተመረተ ነው...'; }
         
+        // ጥያቄውን በቀጥታ ወደ ራሳችን Vercel Backend (/api/generate) እንልካለን
         const res = await fetch(CONFIG.sunoBackendUrl, { 
             method: "POST", 
             headers: { 
-                "Content-Type": "application/json",
-                "Authorization": `Bearer ${CONFIG.apiframeApiKey}`
+                "Content-Type": "application/json"
             },
             body: JSON.stringify({ 
                 prompt: lyrics + " [Style: " + style + "]", 
-                make_instrumental: false,
-                model: "suno-v3"
+                title: title
             }) 
         });
         
@@ -608,15 +608,15 @@ async function generateMusic() {
                 showToast("ዜማው በተሳካ ሁኔታ ተመርቷል! 🎵");
                 refreshAppView();
             } else {
-                throw new Error("የሙዚቃ ሊንክ ከapiframe ማግኘት አልተቻለም!");
+                throw new Error("የሙዚቃ ሊንክ ማግኘት አልተቻለም!");
             }
         } else {
-            const errText = await res.text();
-            throw new Error(`የሰርቨር ስህተት፦ ${res.status} - ${errText}`);
+            const errData = await res.json();
+            throw new Error(errData.error || "የባክኤንድ ስህተት");
         }
     } catch(e) {
-        console.error("የማመንጨት ስህተት ተከስቷል", e);
-        showToast("ስህተት፦ ሙዚቃውን ማመንጨት አልተቻለም። እባክዎ የክሬዲት መጠንዎን ወይም የኤፒአይ ሁኔታን ያረጋግጡ። ⚠️", false);
+        console.error("የማመንጨት ስህተት", e);
+        showToast("ስህተት፦ ሙዚቃውን ማመንጨት አልተቻለም። ⚠️", false);
     } finally {
         if (genBtn) { genBtn.disabled = false; genBtn.innerHTML = '<i class="fa-solid fa-music"></i> Synthesize Audio / ዜማ ፍጠር'; }
     }
